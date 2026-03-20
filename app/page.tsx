@@ -37,6 +37,7 @@ interface OutfitResult {
   description: string
   items: number[]
   styling_tips: string
+  mockupImage?: string | null
 }
 
 export default function HomePage() {
@@ -49,6 +50,8 @@ export default function HomePage() {
   const [outfitPrompt, setOutfitPrompt] = useState('')
   const [outfitLoading, setOutfitLoading] = useState(false)
   const [outfitResult, setOutfitResult] = useState<OutfitResult | null>(null)
+  const [modelImage, setModelImage] = useState<string | null>(null)
+  const modelInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
@@ -92,13 +95,19 @@ export default function HomePage() {
       const res = await fetch('/api/outfit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: outfitPrompt, wardrobe }),
+        body: JSON.stringify({ prompt: outfitPrompt, wardrobe, modelImage }),
       })
       const data = await res.json()
       if (data.outfit) setOutfitResult(data.outfit)
       else alert('Could not generate outfit. Try again.')
     } catch { alert('Something went wrong.') }
     finally { setOutfitLoading(false) }
+  }
+
+  function handleModelUpload(file: File) {
+    const reader = new FileReader()
+    reader.onload = () => setModelImage(reader.result as string)
+    reader.readAsDataURL(file)
   }
 
   const filtered = filterCat === 'all' ? wardrobe : wardrobe.filter(i => i.type === filterCat)
@@ -204,6 +213,37 @@ export default function HomePage() {
 
         {tab === 'outfits' && (
           <div style={{ padding: '20px' }}>
+            {/* Model Upload */}
+            <div style={{ background: '#fff', borderRadius: 20, padding: 20, border: '1px solid #f0ede8', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div
+                onClick={() => modelInputRef.current?.click()}
+                style={{
+                  width: 64, height: 64, borderRadius: 20, flexShrink: 0,
+                  background: modelImage ? 'none' : '#f5f3ef',
+                  border: modelImage ? '2px solid #b8a080' : '2px dashed #ddd',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', overflow: 'hidden',
+                }}
+              >
+                {modelImage ? (
+                  <img src={modelImage} alt="Model" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <span style={{ fontSize: 24, opacity: 0.3 }}>👤</span>
+                )}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 2 }}>
+                  {modelImage ? 'Model set ✓' : 'Set your model'}
+                </div>
+                <div style={{ fontSize: 12, color: '#999' }}>
+                  {modelImage ? 'Outfits will be mocked up on you' : 'Upload a full-body photo to try outfits on'}
+                </div>
+              </div>
+              <input ref={modelInputRef} type="file" accept="image/*" style={{ display: 'none' }}
+                onChange={e => { if (e.target.files?.[0]) handleModelUpload(e.target.files[0]) }} />
+            </div>
+
+            {/* Style Prompt */}
             <div style={{ background: '#fff', borderRadius: 20, padding: 24, border: '1px solid #f0ede8', boxShadow: '0 2px 12px rgba(0,0,0,0.03)' }}>
               <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, fontWeight: 400, fontStyle: 'italic', marginBottom: 4, marginTop: 0 }}>Style me</h2>
               <p style={{ fontSize: 13, color: '#999', marginBottom: 20 }}>Tell me where you&apos;re going and I&apos;ll create the perfect outfit from your wardrobe</p>
@@ -216,8 +256,7 @@ export default function HomePage() {
                 style={{
                   width: '100%', padding: '14px 16px', borderRadius: 14,
                   border: '1px solid #e8e4dd', fontSize: 14, outline: 'none',
-                  fontFamily: 'inherit', background: '#fafaf8',
-                  boxSizing: 'border-box',
+                  fontFamily: 'inherit', background: '#fafaf8', boxSizing: 'border-box',
                 }}
               />
               <button
@@ -227,40 +266,69 @@ export default function HomePage() {
                   width: '100%', padding: 15, borderRadius: 14, marginTop: 12,
                   background: outfitPrompt.trim() ? '#1a1a1a' : '#e8e4dd',
                   color: outfitPrompt.trim() ? '#fff' : '#999',
-                  border: 'none', fontWeight: 700, fontSize: 14, cursor: outfitPrompt.trim() ? 'pointer' : 'default',
+                  border: 'none', fontWeight: 700, fontSize: 14,
+                  cursor: outfitPrompt.trim() ? 'pointer' : 'default',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 }}
               >
-                {outfitLoading ? 'Styling...' : <>{Icons.sparkle} Make my outfit</>}
+                {outfitLoading ? (
+                  <span>
+                    {modelImage ? '✨ Styling & generating mockup...' : '✨ Generating outfit...'}
+                  </span>
+                ) : (
+                  <>{Icons.sparkle} Make my outfit</>
+                )}
               </button>
             </div>
 
             {/* Outfit result */}
             {outfitResult && (
-              <div style={{ marginTop: 20, background: '#fff', borderRadius: 20, padding: 24, border: '1px solid #f0ede8' }}>
-                <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontStyle: 'italic', fontWeight: 400, marginTop: 0, marginBottom: 4 }}>
-                  {outfitResult.outfitName}
-                </h3>
-                <p style={{ fontSize: 13, color: '#666', lineHeight: 1.6, marginBottom: 16 }}>{outfitResult.description}</p>
+              <div style={{ marginTop: 20, background: '#fff', borderRadius: 20, overflow: 'hidden', border: '1px solid #f0ede8' }}>
+                {/* Mockup Image */}
+                {outfitResult.mockupImage && (
+                  <div style={{ aspectRatio: '2/3', background: '#f5f3ef', overflow: 'hidden' }}>
+                    <img src={outfitResult.mockupImage} alt={outfitResult.outfitName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  </div>
+                )}
 
-                <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 8, WebkitOverflowScrolling: 'touch' }}>
-                  {outfitResult.items.map(idx => {
-                    const item = wardrobe[idx - 1]
-                    if (!item) return null
-                    return (
-                      <div key={item.id} style={{ flexShrink: 0, width: 130 }}>
-                        <div style={{ width: 130, height: 160, borderRadius: 14, overflow: 'hidden', background: '#f5f3ef', border: '1px solid #f0ede8' }}>
-                          {item.image && <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                <div style={{ padding: 24 }}>
+                  <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 22, fontStyle: 'italic', fontWeight: 400, marginTop: 0, marginBottom: 4 }}>
+                    {outfitResult.outfitName}
+                  </h3>
+                  <p style={{ fontSize: 13, color: '#666', lineHeight: 1.6, marginBottom: 20 }}>{outfitResult.description}</p>
+
+                  {/* Item list */}
+                  <div style={{ fontSize: 10, color: '#999', textTransform: 'uppercase', letterSpacing: 1.5, fontWeight: 700, marginBottom: 10 }}>The Look</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+                    {outfitResult.items.map(idx => {
+                      const item = wardrobe[idx - 1]
+                      if (!item) return null
+                      return (
+                        <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fafaf8', borderRadius: 14, padding: 10, border: '1px solid #f0ede8' }}>
+                          <div style={{ width: 56, height: 56, borderRadius: 12, overflow: 'hidden', background: '#f0ede8', flexShrink: 0 }}>
+                            {item.image && <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 1 }}>{item.name}</div>
+                            <div style={{ fontSize: 11, color: '#b8a080' }}>{item.brand}</div>
+                          </div>
+                          <div style={{ fontSize: 14, fontWeight: 800, flexShrink: 0 }}>{item.price}</div>
                         </div>
-                        <div style={{ fontSize: 11, fontWeight: 600, marginTop: 6, lineHeight: 1.3 }}>{item.name}</div>
-                        <div style={{ fontSize: 10, color: '#b8a080' }}>{item.brand} · {item.price}</div>
-                      </div>
-                    )
-                  })}
-                </div>
+                      )
+                    })}
+                  </div>
 
-                <div style={{ marginTop: 16, padding: '12px 16px', background: '#fafaf8', borderRadius: 12, fontSize: 13, color: '#666', lineHeight: 1.6 }}>
-                  💡 {outfitResult.styling_tips}
+                  {/* Total */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderTop: '1px solid #f0ede8', marginBottom: 16 }}>
+                    <span style={{ fontSize: 13, color: '#999' }}>Outfit total</span>
+                    <span style={{ fontSize: 20, fontWeight: 800 }}>
+                      £{outfitResult.items.reduce((s, idx) => s + (wardrobe[idx - 1]?.priceValue || 0), 0).toLocaleString('en-GB')}
+                    </span>
+                  </div>
+
+                  <div style={{ padding: '14px 16px', background: '#fafaf8', borderRadius: 14, fontSize: 13, color: '#666', lineHeight: 1.6, border: '1px solid #f0ede8' }}>
+                    💡 {outfitResult.styling_tips}
+                  </div>
                 </div>
               </div>
             )}

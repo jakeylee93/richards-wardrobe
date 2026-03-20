@@ -6,7 +6,7 @@ type TabId = 'wardrobe' | 'outfits' | 'sell'
 
 interface ClothingItem {
   id: string
-  image: string // base64
+  image: string // base64 or URL
   name: string
   type: string
   color: string
@@ -14,6 +14,8 @@ interface ClothingItem {
   season: string
   occasions: string[]
   brand: string
+  price: string
+  priceValue: number
   searchQuery: string
   addedAt: string
 }
@@ -29,10 +31,12 @@ export default function HomePage() {
   const [tab, setTab] = useState<TabId>('wardrobe')
   const [wardrobe, setWardrobe] = useState<ClothingItem[]>([])
   const [identifying, setIdentifying] = useState(false)
+  const [scanning, setScanning] = useState(false)
   const [capturedImage, setCapturedImage] = useState<string | null>(null)
   const [selectedItem, setSelectedItem] = useState<ClothingItem | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+  const scannerRef = useRef<HTMLDivElement>(null)
 
   const handleFile = useCallback(async (file: File) => {
     const reader = new FileReader()
@@ -71,6 +75,61 @@ export default function HomePage() {
     reader.readAsDataURL(file)
   }, [])
 
+  const startBarcodeScan = useCallback(async () => {
+    setScanning(true)
+    try {
+      const { Html5Qrcode } = await import('html5-qrcode')
+      const scanner = new Html5Qrcode('barcode-reader')
+      await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 280, height: 150 } },
+        async (decodedText: string) => {
+          await scanner.stop()
+          setScanning(false)
+          setIdentifying(true)
+          setCapturedImage(null)
+          try {
+            const res = await fetch('/api/barcode', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ barcode: decodedText }),
+            })
+            const data = await res.json()
+            if (data.item) {
+              const newItem: ClothingItem = {
+                id: uid(),
+                image: data.item.imageUrl || '',
+                name: data.item.name,
+                type: data.item.type || 'top',
+                color: data.item.color || '',
+                material: data.item.material || '',
+                season: data.item.season || 'all',
+                occasions: data.item.occasions || [],
+                brand: data.item.brand || 'Unknown',
+                price: data.item.price || '',
+                priceValue: data.item.priceValue || 0,
+                searchQuery: data.item.searchQuery || decodedText,
+                addedAt: new Date().toISOString(),
+              }
+              setWardrobe(prev => [newItem, ...prev])
+            } else {
+              alert('Could not identify product from barcode. Try taking a photo instead.')
+            }
+          } catch {
+            alert('Barcode lookup failed. Try again.')
+          } finally {
+            setIdentifying(false)
+          }
+        },
+        () => {} // ignore scan errors
+      )
+    } catch (err) {
+      console.error('Scanner error:', err)
+      setScanning(false)
+      alert('Camera access needed for barcode scanning.')
+    }
+  }, [])
+
   const categories = ['all', 'top', 'bottom', 'dress', 'outerwear', 'shoes', 'accessory']
   const [filterCat, setFilterCat] = useState('all')
   const filtered = filterCat === 'all' ? wardrobe : wardrobe.filter(i => i.type === filterCat)
@@ -91,7 +150,7 @@ export default function HomePage() {
         <div style={{
           fontSize: 11, letterSpacing: 4, textTransform: 'uppercase',
           color: '#c4a265', fontWeight: 600, marginBottom: 8,
-        }}>Richard&apos;s</div>
+        }}>Mitch&apos;s</div>
         <h1 style={{
           fontFamily: "'Playfair Display', serif",
           fontSize: 36, fontWeight: 400, margin: 0, letterSpacing: 1,
@@ -103,37 +162,81 @@ export default function HomePage() {
         }} />
       </header>
 
-      {/* Add Button — Hero */}
-      <div style={{ padding: '0 24px 20px', display: 'flex', gap: 12 }}>
+      {/* Add Buttons */}
+      <div style={{ padding: '0 24px 12px', display: 'flex', gap: 10 }}>
+        <button
+          onClick={startBarcodeScan}
+          style={{
+            flex: 1, padding: '14px 8px',
+            background: 'linear-gradient(135deg, #c4a265, #d4b87a)',
+            border: 'none', borderRadius: 14, cursor: 'pointer',
+            color: '#0a0a0a', fontWeight: 700, fontSize: 13,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          }}
+        >
+          📱 Scan Barcode
+        </button>
         <button
           onClick={() => cameraInputRef.current?.click()}
           style={{
-            flex: 1, padding: '16px',
-            background: 'linear-gradient(135deg, #c4a265, #d4b87a)',
-            border: 'none', borderRadius: 16, cursor: 'pointer',
-            color: '#0a0a0a', fontWeight: 700, fontSize: 14,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            flex: 1, padding: '14px 8px',
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, cursor: 'pointer',
+            color: '#fafaf9', fontWeight: 600, fontSize: 13,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           }}
         >
-          📷 Take Photo
+          📷 Photo
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
           style={{
-            flex: 1, padding: '16px',
+            flex: 0.7, padding: '14px 8px',
             background: 'rgba(255,255,255,0.06)',
-            border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, cursor: 'pointer',
-            color: '#fafaf9', fontWeight: 600, fontSize: 14,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, cursor: 'pointer',
+            color: '#fafaf9', fontWeight: 600, fontSize: 13,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
           }}
         >
-          🖼️ Upload
+          🖼️
         </button>
         <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
           onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]) }} />
         <input ref={fileInputRef} type="file" accept="image/*" style={{ display: 'none' }}
           onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]) }} />
       </div>
+
+      {/* Barcode Scanner Overlay */}
+      {scanning && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 99999,
+          background: '#000', display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{ fontSize: 14, color: '#c4a265', fontWeight: 600, marginBottom: 16 }}>
+            Point camera at barcode
+          </div>
+          <div
+            id="barcode-reader"
+            ref={scannerRef}
+            style={{ width: 320, height: 320, borderRadius: 16, overflow: 'hidden' }}
+          />
+          <button
+            onClick={() => {
+              setScanning(false)
+              // Try to stop scanner
+              import('html5-qrcode').then(({ Html5Qrcode }) => {
+                Html5Qrcode.getCameras().then(() => {})
+              }).catch(() => {})
+            }}
+            style={{
+              marginTop: 24, padding: '12px 32px', borderRadius: 12,
+              background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)',
+              color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+            }}
+          >Cancel</button>
+        </div>
+      )}
 
       {/* Identifying overlay */}
       {identifying && capturedImage && (
@@ -222,10 +325,12 @@ export default function HomePage() {
                     cursor: 'pointer', transition: 'transform 0.2s',
                   }}
                 >
-                  <div style={{ aspectRatio: '3/4', overflow: 'hidden' }}>
-                    <img src={item.image} alt={item.name} style={{
-                      width: '100%', height: '100%', objectFit: 'cover',
-                    }} />
+                  <div style={{ aspectRatio: '3/4', overflow: 'hidden', background: '#1a1a1f', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {item.image ? (
+                      <img src={item.image} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <span style={{ fontSize: 48 }}>{TYPE_EMOJI[item.type] || TYPE_EMOJI.default}</span>
+                    )}
                   </div>
                   <div style={{ padding: '12px 14px' }}>
                     <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2, lineHeight: 1.3 }}>
@@ -234,11 +339,18 @@ export default function HomePage() {
                     <div style={{ fontSize: 11, color: '#888' }}>
                       {item.color} · {item.material}
                     </div>
-                    {item.brand !== 'Unknown' && (
-                      <div style={{ fontSize: 11, color: '#c4a265', fontWeight: 600, marginTop: 4 }}>
-                        {item.brand}
-                      </div>
-                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                      {item.brand !== 'Unknown' && (
+                        <span style={{ fontSize: 11, color: '#c4a265', fontWeight: 600 }}>
+                          {item.brand}
+                        </span>
+                      )}
+                      {item.price && (
+                        <span style={{ fontSize: 13, color: '#fff', fontWeight: 700 }}>
+                          {item.price}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -309,11 +421,18 @@ export default function HomePage() {
                 fontFamily: "'Playfair Display', serif",
                 fontSize: 24, fontWeight: 400, margin: '0 0 4px', fontStyle: 'italic',
               }}>{selectedItem.name}</h2>
-              {selectedItem.brand !== 'Unknown' && (
-                <div style={{ fontSize: 13, color: '#c4a265', fontWeight: 600, marginBottom: 12 }}>
-                  {selectedItem.brand}
-                </div>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                {selectedItem.brand !== 'Unknown' && (
+                  <span style={{ fontSize: 13, color: '#c4a265', fontWeight: 600 }}>
+                    {selectedItem.brand}
+                  </span>
+                )}
+                {selectedItem.price && (
+                  <span style={{ fontSize: 18, fontWeight: 800, color: '#fff' }}>
+                    {selectedItem.price}
+                  </span>
+                )}
+              </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
                 <DetailPill label="Colour" value={selectedItem.color} />

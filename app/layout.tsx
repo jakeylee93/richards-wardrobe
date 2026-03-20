@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 
 export const metadata: Metadata = {
-  title: "Richard's Wardrobe",
+  title: "Mitch's Wardrobe",
   description: 'Your AI-powered digital wardrobe',
 }
 

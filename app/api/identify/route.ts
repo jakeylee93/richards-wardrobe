@@ -34,6 +34,8 @@ export async function POST(req: NextRequest) {
   "season": "Best seasons to wear (spring/summer/autumn/winter or all)",
   "occasions": ["casual", "smart", "formal", "sport", "night out"],
   "brand": "Brand if visible, otherwise 'Unknown'",
+  "price": "Estimated UK retail price as string e.g. '£29.99'",
+  "priceValue": 29.99,
   "searchQuery": "A search query to find this exact item or similar online"
 }
 Return ONLY the JSON, no markdown, no explanation.`,
